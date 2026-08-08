@@ -1,51 +1,98 @@
-"""GLM (智谱 BigModel) Teacher 适配器"""
+"""GLM (智谱 BigModel) Teacher 适配器 — Anthropic 兼容接口
 
-from openai import OpenAI
+Docs: https://open.bigmodel.cn/api/anthropic
+Base URL: https://open.bigmodel.cn/api/anthropic
+格式: Anthropic Messages API 兼容
+"""
+
+import json
+import httpx
 
 from .base import BaseTeacher, TeacherResponse
 
 
 class GLMTeacher(BaseTeacher):
-    """GLM / 智谱 BigModel API
+    """GLM / 智谱 BigModel API (Anthropic 兼容格式)
 
-    Docs: https://open.bigmodel.cn/dev/api
-    Base URL: https://open.bigmodel.cn/api/paas/v4
+    通过 Anthropic Messages API 调用 GLM-5.2
+    Coding Plan 订阅，无需按量付费。
     """
 
     DEFAULT_MODEL = "glm-5.2"
-    BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
+    BASE_URL = "https://open.bigmodel.cn/api/anthropic"
 
     AVAILABLE_MODELS = [
-        "glm-5.2",           # GLM-5.2 最新旗舰
-        "glm-4-plus",        # GLM-4 旗舰
-        "glm-4",             # GLM-4 标准
-        "glm-4-air",         # GLM-4 轻量
-        "glm-4-airx",        # GLM-4 轻量极速
-        "glm-4-flash",       # GLM-4 免费极速
-        "glm-4-long",        # GLM-4 长文本
+        "glm-5.2",            # GLM-5.2 最新旗舰
+        "glm-4-plus",         # GLM-4 旗舰
+        "glm-4",              # GLM-4 标准
     ]
 
     def __init__(self, api_key: str, model: str = DEFAULT_MODEL, **kwargs):
         super().__init__(api_key, model, self.BASE_URL, **kwargs)
-        self._client = OpenAI(api_key=api_key, base_url=self.BASE_URL)
 
     def chat(self, messages: list[dict], temperature: float = 0.7, max_tokens: int = 4096, **kwargs) -> TeacherResponse:
-        """调用 GLM 对话 API"""
-        resp = self._client.chat.completions.create(
-            model=self.model,
-            messages=messages,
-            temperature=temperature,
-            max_tokens=max_tokens,
-            **kwargs,
-        )
+        """调用 GLM 对话 API (Anthropic 兼容格式)
+
+        Args:
+            messages: OpenAI 格式 [{"role": "system/user/assistant", "content": "..."}]
+                     内部会自动转换为 Anthropic 格式
+
+        Returns:
+            TeacherResponse
+        """
+        # OpenAI 格式 → Anthropic 格式转换
+        system = ""
+        anthropic_messages = []
+
+        for msg in messages:
+            if msg["role"] == "system":
+                system += msg["content"] + "\n"
+            else:
+                anthropic_messages.append({
+                    "role": msg["role"],
+                    "content": msg["content"],
+                })
+
+        payload = {
+            "model": self.model,
+            "max_tokens": max_tokens,
+            "messages": anthropic_messages,
+            "temperature": temperature,
+        }
+        if system.strip():
+            payload["system"] = system.strip()
+
+        headers = {
+            "x-api-key": self.api_key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+        }
+
+        # 同步请求
+        with httpx.Client(timeout=120) as client:
+            resp = client.post(
+                f"{self.BASE_URL}/v1/messages",
+                json=payload,
+                headers=headers,
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        # 解析 Anthropic 响应
+        text = ""
+        for block in data.get("content", []):
+            if block.get("type") == "text":
+                text += block["text"]
+
+        usage = data.get("usage", {})
 
         return TeacherResponse(
-            text=resp.choices[0].message.content,
-            model=resp.model,
+            text=text,
+            model=data.get("model", self.model),
             usage={
-                "prompt_tokens": resp.usage.prompt_tokens,
-                "completion_tokens": resp.usage.completion_tokens,
-                "total_tokens": resp.usage.total_tokens,
+                "prompt_tokens": usage.get("input_tokens", 0),
+                "completion_tokens": usage.get("output_tokens", 0),
+                "total_tokens": usage.get("input_tokens", 0) + usage.get("output_tokens", 0),
             },
-            raw=resp.model_dump(),
+            raw=data,
         )
