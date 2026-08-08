@@ -1,0 +1,234 @@
+<!doctype html>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Model Distill Pipeline</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #f8fafc;
+    --fg: #172033;
+    --muted: #5b6475;
+    --line: #64748b;
+    --neutral: #e2e8f0;
+    --input: #bfdbfe;
+    --process: #c7d2fe;
+    --storage: #99f6e4;
+    --external: #fde68a;
+    --risk: #fecaca;
+    --accent: #c4b5fd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #0f172a;
+      --fg: #e5e7eb;
+      --muted: #a3adbd;
+      --line: #94a3b8;
+      --neutral: #334155;
+      --input: #1d4ed8;
+      --process: #4338ca;
+      --storage: #0f766e;
+      --external: #92400e;
+      --risk: #991b1b;
+      --accent: #7c3aed;
+    }
+  }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--fg);
+    font: 13px/1.4 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  main { max-width: 1100px; margin: 24px auto; padding: 0 20px; }
+  svg { width: 100%; height: auto; display: block; }
+  .title { font-size: 22px; font-weight: 700; fill: var(--fg); }
+  .subtitle { font-size: 13px; fill: var(--muted); }
+  .label { font-size: 13px; font-weight: 600; fill: var(--fg); }
+  .small { font-size: 11px; fill: var(--muted); }
+  .tiny { font-size: 10px; fill: var(--muted); }
+  .mono { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 10px; fill: var(--muted); }
+  .node { stroke: var(--line); stroke-width: 1.5; rx: 8; }
+  .edge { stroke: var(--line); stroke-width: 1.5; fill: none; }
+  .edge-thick { stroke: var(--line); stroke-width: 2.5; fill: none; }
+  .zone { fill: none; stroke: var(--line); stroke-width: 1; stroke-dasharray: 6 5; opacity: 0.5; rx: 12; }
+  .zone-label { font-size: 12px; font-weight: 700; fill: var(--muted); letter-spacing: 1px; }
+  .step-num { font-size: 20px; font-weight: 800; fill: var(--fg); opacity: 0.15; }
+</style>
+<main>
+<svg viewBox="0 0 1060 920" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+    <marker id="arrow-thick" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#64748b"/>
+    </marker>
+  </defs>
+
+  <!-- Title -->
+  <text x="530" y="36" text-anchor="middle" class="title">Model Distill — 代码任务规划能力蒸馏流水线</text>
+  <text x="530" y="56" text-anchor="middle" class="subtitle">GLM-5.2 (Teacher) → Qwen3-8B (Student) · 昇腾 910B 集群</text>
+
+  <!-- ════════ ZONE: 数据生成 ════════ -->
+  <rect x="20" y="80" width="1020" height="260" class="zone" />
+  <text x="40" y="100" class="zone-label">PHASE 1 · 数据生成</text>
+
+  <!-- Step 1: 数据源 -->
+  <rect x="40" y="120" width="180" height="80" class="node input" />
+  <text x="130" y="145" text-anchor="middle" class="label">📂 开源数据集</text>
+  <text x="130" y="163" text-anchor="middle" class="small">HumanEval (164题)</text>
+  <text x="130" y="178" text-anchor="middle" class="small">MBPP (974题)</text>
+  <text x="130" y="193" text-anchor="middle" class="small">→ 采样 500 题</text>
+
+  <!-- Step 2: 数据划分 -->
+  <rect x="260" y="120" width="140" height="80" class="node neutral" />
+  <text x="330" y="148" text-anchor="middle" class="label">🔀 数据划分</text>
+  <text x="330" y="168" text-anchor="middle" class="small">训练: 450 题</text>
+  <text x="330" y="183" text-anchor="middle" class="small">评估: 50 题</text>
+
+  <!-- Step 3: GLM-5.2 API -->
+  <rect x="440" y="110" width="200" height="100" class="node external" />
+  <text x="540" y="135" text-anchor="middle" class="label">🧠 GLM-5.2 API</text>
+  <text x="540" y="153" text-anchor="middle" class="small">open.bigmodel.cn</text>
+  <text x="540" y="168" text-anchor="middle" class="small">/api/anthropic</text>
+  <text x="540" y="183" text-anchor="middle" class="tiny">Coding Plan</text>
+  <text x="540" y="198" text-anchor="middle" class="tiny">450 次 API 调用</text>
+
+  <!-- Step 4: 生成内容 -->
+  <rect x="680" y="110" width="200" height="100" class="node process" />
+  <text x="780" y="135" text-anchor="middle" class="label">📝 生成计划+代码</text>
+  <text x="780" y="155" text-anchor="middle" class="small">## 解题计划</text>
+  <text x="780" y="168" text-anchor="middle" class="small">## 边界分析</text>
+  <text x="780" y="181" text-anchor="middle" class="small">## 代码实现</text>
+  <text x="780" y="194" text-anchor="middle" class="small">## 复杂度分析</text>
+
+  <!-- Step 5: 质量过滤 -->
+  <rect x="440" y="230" width="200" height="80" class="node risk" />
+  <text x="540" y="255" text-anchor="middle" class="label">🔍 质量过滤</text>
+  <text x="540" y="273" text-anchor="middle" class="small">✅ 代码跑通测试用例</text>
+  <text x="540" y="287" text-anchor="middle" class="small">✅ 格式完整</text>
+  <text x="540" y="301" text-anchor="middle" class="small">→ ~400 条有效数据</text>
+
+  <!-- 格式化输出 -->
+  <rect x="680" y="230" width="200" height="80" class="node storage" />
+  <text x="780" y="255" text-anchor="middle" class="label">📦 ChatML 格式化</text>
+  <text x="780" y="275" text-anchor="middle" class="mono">{"messages": [</text>
+  <text x="780" y="288" text-anchor="middle" class="mono"> {system}, {user},</text>
+  <text x="780" y="301" text-anchor="middle" class="mono"> {assistant}]}</text>
+
+  <!-- Phase 1 箭头 -->
+  <line x1="220" y1="160" x2="260" y2="160" class="edge" marker-end="url(#arrow)" />
+  <line x1="400" y1="160" x2="440" y2="160" class="edge" marker-end="url(#arrow)" />
+  <line x1="640" y1="160" x2="680" y2="160" class="edge" marker-end="url(#arrow)" />
+  <line x1="780" y1="210" x2="780" y2="230" class="edge" marker-end="url(#arrow)" />
+  <line x1="680" y1="270" x2="640" y2="270" class="edge" marker-end="url(#arrow)" />
+  <line x1="440" y1="270" x2="400" y2="270" class="edge" marker-end="url(#arrow)" />
+
+  <!-- ════════ ZONE: 训练 ════════ -->
+  <rect x="20" y="360" width="1020" height="240" class="zone" />
+  <text x="40" y="380" class="zone-label">PHASE 2 · NPU 训练 (容器: deepseek-rl:910b-cann9.1-v25)</text>
+
+  <!-- Step 6: Student 模型 -->
+  <rect x="40" y="400" width="180" height="80" class="node input" />
+  <text x="130" y="425" text-anchor="middle" class="label">🤖 Student 模型</text>
+  <text x="130" y="443" text-anchor="middle" class="small">Qwen3-8B</text>
+  <text x="130" y="458" text-anchor="middle" class="small">/data/model/Qwen3-8B</text>
+  <text x="130" y="473" text-anchor="middle" class="tiny">bf16 · 8.2B 参数</text>
+
+  <!-- Step 7: LoRA -->
+  <rect x="260" y="400" width="160" height="80" class="node process" />
+  <text x="340" y="425" text-anchor="middle" class="label">⚡ LoRA 微调</text>
+  <text x="340" y="443" text-anchor="middle" class="small">r=64, α=128</text>
+  <text x="340" y="458" text-anchor="middle" class="small">bf16 精度</text>
+  <text x="340" y="473" text-anchor="middle" class="tiny">3 epochs · lr=2e-4</text>
+
+  <!-- Step 8: NPU 集群 -->
+  <rect x="460" y="395" width="200" height="90" class="node external" />
+  <text x="560" y="420" text-anchor="middle" class="label">🖥️ 昇腾 910B × 8</text>
+  <text x="560" y="438" text-anchor="middle" class="small">119.8.234.170</text>
+  <text x="560" y="453" text-anchor="middle" class="small">torch_npu + HCCL</text>
+  <text x="560" y="468" text-anchor="middle" class="tiny">61GB HBM × 8 = 488GB</text>
+
+  <!-- Step 9: 训练过程 -->
+  <rect x="700" y="400" width="200" height="80" class="node neutral" />
+  <text x="800" y="425" text-anchor="middle" class="label">🔥 训练过程</text>
+  <text x="800" y="443" text-anchor="middle" class="small">Epoch 1: 2.1→1.2</text>
+  <text x="800" y="458" text-anchor="middle" class="small">Epoch 2: 1.2→0.8</text>
+  <text x="800" y="473" text-anchor="middle" class="small">Epoch 3: 0.8→0.6</text>
+
+  <!-- Step 10: 输出 -->
+  <rect x="260" y="510" width="340" height="70" class="node storage" />
+  <text x="430" y="535" text-anchor="middle" class="label">💾 蒸馏后模型</text>
+  <text x="430" y="555" text-anchor="middle" class="mono">/data/z00666713/model-distill/outputs/</text>
+  <text x="430" y="570" text-anchor="middle" class="small">LoRA Adapter (~200MB) + tokenizer</text>
+
+  <!-- Phase 2 箭头 -->
+  <line x1="220" y1="440" x2="260" y2="440" class="edge" marker-end="url(#arrow)" />
+  <line x1="420" y1="440" x2="460" y2="440" class="edge" marker-end="url(#arrow)" />
+  <line x1="660" y1="440" x2="700" y2="440" class="edge" marker-end="url(#arrow)" />
+  <line x1="800" y1="480" x2="430" y2="510" class="edge" marker-end="url(#arrow)" />
+  <line x1="340" y1="480" x2="340" y2="510" class="edge" marker-end="url(#arrow)" />
+
+  <!-- ════════ ZONE: 评估 ════════ -->
+  <rect x="20" y="620" width="1020" height="200" class="zone" />
+  <text x="40" y="640" class="zone-label">PHASE 3 · 评估</text>
+
+  <!-- Step 11: 评估题 -->
+  <rect x="40" y="660" width="140" height="70" class="node input" />
+  <text x="110" y="685" text-anchor="middle" class="label">📋 50 道</text>
+  <text x="110" y="703" text-anchor="middle" class="small">评估题</text>
+  <text x="110" y="718" text-anchor="middle" class="tiny">(训练时未见)</text>
+
+  <!-- Step 12: Student 做题 -->
+  <rect x="220" y="660" width="180" height="70" class="node process" />
+  <text x="310" y="685" text-anchor="middle" class="label">🧪 Student 做题</text>
+  <text x="310" y="703" text-anchor="middle" class="small">蒸馏后模型推理</text>
+  <text x="310" y="718" text-anchor="middle" class="tiny">先输出计划 → 再写代码</text>
+
+  <!-- Step 13: 代码执行 -->
+  <rect x="440" y="660" width="160" height="70" class="node risk" />
+  <text x="520" y="685" text-anchor="middle" class="label">⚙️ 代码执行</text>
+  <text x="520" y="703" text-anchor="middle" class="small">运行测试用例</text>
+  <text x="520" y="718" text-anchor="middle" class="tiny">pass / fail</text>
+
+  <!-- Step 14: 评估报告 -->
+  <rect x="640" y="650" width="200" height="90" class="node storage" />
+  <text x="740" y="675" text-anchor="middle" class="label">📊 评估报告</text>
+  <text x="740" y="693" text-anchor="middle" class="small">pass@1: 76%</text>
+  <text x="740" y="707" text-anchor="middle" class="small">计划质量: 8/10</text>
+  <text x="740" y="721" text-anchor="middle" class="small">平均步骤: 7.2</text>
+  <text x="740" y="735" text-anchor="middle" class="small">vs 原始 Qwen: +16%</text>
+
+  <!-- Phase 3 箭头 -->
+  <line x1="180" y1="695" x2="220" y2="695" class="edge" marker-end="url(#arrow)" />
+  <line x1="400" y1="695" x2="440" y2="695" class="edge" marker-end="url(#arrow)" />
+  <line x1="600" y1="695" x2="640" y2="695" class="edge" marker-end="url(#arrow)" />
+
+  <!-- ════════ 最终产出 ════════ -->
+  <rect x="880" y="650" width="140" height="90" class="node" fill="var(--accent)" />
+  <text x="950" y="680" text-anchor="middle" class="label">🎉 最终产出</text>
+  <text x="950" y="698" text-anchor="middle" class="small">本地部署</text>
+  <text x="950" y="712" text-anchor="middle" class="small">代码模型</text>
+  <text x="950" y="726" text-anchor="middle" class="tiny">具备 GLM-5.2</text>
+  <text x="950" y="738" text-anchor="middle" class="tiny">规划能力</text>
+  <line x1="840" y1="695" x2="880" y2="695" class="edge-thick" marker-end="url(#arrow-thick)" />
+
+  <!-- ════════ 底部信息 ════════ -->
+  <line x1="20" y1="840" x2="1040" y2="840" stroke="var(--line)" stroke-width="1" stroke-dasharray="4 4" />
+
+  <text x="530" y="865" text-anchor="middle" class="small">
+    📁 项目: /data/z00666713/model-distill/ · 🐳 容器: distill-train · 💰 API 成本: ~¥50 · ⏱️ 训练: ~2-3h
+  </text>
+  <text x="530" y="883" text-anchor="middle" class="tiny">
+    代码仓库: github.com/Maxwell-AI-lab/model-distill · Teacher: GLM-5.2 · Student: Qwen3-8B
+  </text>
+
+  <!-- 数据流主箭头: Phase1 → Phase2 -->
+  <line x1="780" y1="320" x2="780" y2="360" class="edge-thick" marker-end="url(#arrow-thick)" />
+  <text x="800" y="345" class="tiny">train_chatml.jsonl</text>
+
+  <!-- 数据流主箭头: Phase2 → Phase3 -->
+  <line x1="430" y1="600" x2="110" y2="660" class="edge-thick" marker-end="url(#arrow-thick)" />
+  <text x="240" y="630" class="tiny">蒸馏后模型 → 评估</text>
+
+</svg>
+</main>
