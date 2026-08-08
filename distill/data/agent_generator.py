@@ -161,9 +161,12 @@ class AgentTrajectoryGenerator:
                     try:
                         tc = json.loads(tc_str)
                         code = tc.get("code", "")
+                        if not code:
+                            continue
                         tool_result = run_python_code(code)
                     except json.JSONDecodeError:
                         tool_result = "❌ 工具调用格式错误"
+                        code = ""
 
                     # 记录工具结果
                     tool_msg = f"🔧 run_code 结果:\n{tool_result}"
