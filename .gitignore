@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+*.egg
+dist/
+build/
+.eggs/
+
+# Virtual env
+venv/
+env/
+.venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Data & Model
+data/
+outputs/
+experiments/
+*.bin
+*.pt
+*.pth
+*.gguf
+*.safetensors
+
+# WandB
+wandb/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+*.env

@@ -1,0 +1,49 @@
+# 蒸馏实验配置示例 — 客服场景
+
+name: "customer-service-v1"
+description: "将 GLM-4-Plus 的客服对话能力蒸馏到 Qwen2.5-1.5B"
+
+# Teacher 配置
+teacher_type: "glm"           # kimi | glm | deepseek
+teacher_model: "glm-4-plus"
+teacher_api_key_env: "GLM_API_KEY"   # 从环境变量读取
+
+# Student 配置
+student_model: "Qwen/Qwen2.5-1.5B"
+
+# 场景定义
+scene: "电商客服对话"
+system_prompt: "你是一个专业的电商客服，耐心、友好、专业地解答用户问题。"
+topic_seeds:
+  - "退换货政策"
+  - "物流查询"
+  - "商品咨询"
+  - "支付问题"
+  - "售后服务"
+  - "优惠券使用"
+  - "账户安全"
+  - "商品质量"
+  - "发货时间"
+  - "价格对比"
+difficulty_levels:
+  - "easy"
+  - "medium"
+  - "hard"
+
+# 数据生成
+num_samples: 200
+data_output_dir: "data"
+
+# 训练
+train_method: "sft"            # sft | dpo
+use_lora: true
+use_4bit: true
+learning_rate: 2.0e-4
+num_train_epochs: 3
+per_device_train_batch_size: 4
+gradient_accumulation_steps: 4
+output_dir: "outputs/customer-service-v1"
+
+# 评估
+eval_sample_ratio: 0.1
+use_llm_judge: true
