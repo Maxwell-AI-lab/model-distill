@@ -46,4 +46,8 @@ train_data = extract_training_data(
 
 console.print(f"\n[bold green]✅ 数据生成完成: {len(train_data)} 条训练数据[/bold green]")
 console.print(f"   评估集: {len(eval_tasks)} 题")
-console.print("\n下一步: 运行训练脚本\n")
+
+# ═══ Step 2: 生成验证报告 ═══
+console.print("\n[bold yellow]═══ 生成验证报告 ═══[/bold yellow]\n")
+import subprocess
+subprocess.run([sys.executable, "scripts/gen_report.py"], cwd="/data/z00666713/model-distill")
