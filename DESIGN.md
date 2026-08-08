@@ -1,410 +1,203 @@
-# Model Distill — 技术设计方案
+# 代码任务规划能力蒸馏 — 技术设计方案
 
-## 一、背景与问题
+## 一、项目概述
 
-### 1.1 现状
+### 1.1 目标
 
-大模型（GPT-4、Kimi、GLM-4、DeepSeek-V3 等）能力越来越强，但：
+将 **GLM-5.2**（Teacher）的代码任务规划能力，通过 API 黑盒蒸馏，迁移到 **Qwen3-8B**（Student）小模型中。
 
-| 痛点 | 说明 |
+### 1.2 核心价值
+
+- 蒸馏后的小模型学会"先规划解题步骤，再写代码"的范式
+- 在代码任务上显著提升通过率和代码质量
+- 可在单节点昇腾 910B 上本地部署，无需 API 调用
+
+## 二、Teacher 与 Student
+
+### Teacher: GLM-5.2
+
+| 项目 | 值 |
 |------|------|
-| **部署成本高** | 需要大量 GPU 资源，推理延迟高 |
-| **API 依赖** | 调用 API 持续付费，数据隐私不可控 |
-| **场景过载** | 大模型是通才，但垂直场景只需要 10% 的能力 |
-| **落地困难** | 企业需要的是能跑在有限算力上的模型 |
+| 提供方 | 智谱 BigModel |
+| API | Anthropic 兼容接口 |
+| 地址 | `https://open.bigmodel.cn/api/anthropic` |
+| 认证 | x-api-key + anthropic-version |
+| 订阅 | Coding Plan |
+| 优势 | 代码规划、推理、中文理解均顶级 |
 
-### 1.2 目标
+### Student: Qwen3-8B
 
-**把大模型（Teacher）的特定场景能力，系统化地蒸馏到 Qwen 小模型（Student）中。**
+| 项目 | 值 |
+|------|------|
+| 提供方 | 阿里通义 |
+| 参数量 | 8.2B |
+| 本地路径 | `/data/model/Qwen3-8B` |
+| 优势 | 代码基础好、中文强、开源活跃 |
 
-- 蒸馏后的小模型可以在单卡甚至 CPU 上运行
-- 在目标场景上逼近 Teacher 效果
-- 整个过程流水线化、可复现、可扩展
+### 备选 Student
 
----
+| 模型 | 参数量 | 场景 |
+|------|--------|------|
+| Qwen3-0.6B | 0.6B | 极轻量部署 |
+| Qwen3-14B | 14B | 更高精度 |
+| Qwen3.5-35B-A3B | 35B (MoE) | 最强效果 |
 
-## 二、蒸馏策略
+## 三、蒸馏策略
 
-### 2.1 为什么选 API 黑盒蒸馏？
+### 3.1 黑盒蒸馏
 
-我们有 Kimi、GLM、DeepSeek 的 API，但拿不到模型权重和 logits。所以只能做**黑盒蒸馏**：
+通过 Teacher API 生成"题目 → 解题计划 + 代码实现"的训练数据，SFT 训练 Student。
 
-```
-黑盒蒸馏 = 用大模型生成数据 → 用数据训练小模型
-```
+### 3.2 四阶段蒸馏法
 
-这其实是一种特殊的"知识蒸馏"——不依赖 Teacher 的内部状态，只依赖 Teacher 的输出。
+| 阶段 | 方法 | 目标 | 状态 |
+|------|------|------|------|
+| **Phase 1** | SFT | 学会"先规划再编码" | ✅ 当前 |
+| **Phase 2** | DPO | 区分好/差规划 | 待定 |
+| **Phase 3** | 自我反思 | 发现自己计划的漏洞 | 待定 |
+| **Phase 4** | 压缩 | 7B → 1.5B 再蒸馏 | 待定 |
 
-### 2.2 蒸馏的三个层次
-
-```
-┌──────────────────────────────────────────────────────────┐
-│                    蒸馏的三个层次                          │
-│                                                          │
-│  Level 1: 答案蒸馏 (Response Distillation)               │
-│  ── Teacher 回答问题 → Student 模仿回答                   │
-│  ── 最简单，效果最直接                                    │
-│                                                          │
-│  Level 2: 思维蒸馏 (Reasoning Distillation)               │
-│  ── Teacher 展示推理过程 → Student 学习思考方式           │
-│  ── 让 Teacher 输出 Chain-of-Thought                     │
-│                                                          │
-│  Level 3: 反馈蒸馏 (Feedback Distillation / DPO)         │
-│  ── Teacher 当裁判 → Student 偏好对齐                    │
-│  ── 生成 chosen/rejected 对做 DPO 训练                   │
-└──────────────────────────────────────────────────────────┘
-```
-
-**项目支持全部三层，由浅入深。**
-
-### 2.3 多 Teacher 融合策略
-
-一个 Teacher 的能力有限，三个 Teacher 可以：
+### 3.3 数据生成策略
 
 ```
-策略 A: 单独蒸馏 → 各自训练 → 模型合并 (Model Merge)
-策略 B: 混合数据 → 三个 Teacher 各生成 N 条 → 合并训练
-策略 C: 投票机制 → 同一问题三个 Teacher 回答 → 取最优做训练数据
-策略 D: 分工协作 → 不同场景用最擅长的 Teacher
-        Kimi → 长文本场景
-        GLM → 对话/通用
-        DeepSeek → 推理/代码
+输入: HumanEval (164题) + MBPP (974题)
+      ↓ 随机采样 500 题
+      ↓ 90% 训练 / 10% 评估
+      ↓
+GLM-5.2 API 生成:
+      每道题 → ## 解题计划 (步骤分解 + 依赖关系)
+             → ## 边界分析 (特殊情况处理)
+             → ## 代码实现 (完整可运行代码)
+             → ## 复杂度分析 (时间/空间)
+      ↓
+质量过滤:
+      ✅ 代码必须跑通测试用例
+      ✅ 格式完整 (计划+代码)
+      ✅ 非拒绝回答
+      ↓
+格式化: ChatML 格式
 ```
 
-**MVP 先做策略 B（混合数据），后续支持策略 C/D。**
+## 四、训练方案
 
----
+### 4.1 硬件环境
 
-## 三、系统架构
+| 项目 | 值 |
+|------|------|
+| 硬件 | 昇腾 910B3 × 8 (61GB HBM/卡) |
+| 节点 | 119.8.234.170 (aura-1.novalocal) |
+| 系统 | Huawei Cloud EulerOS 2.0 (aarch64) |
+| CANN | 9.1.0-beta.3 |
+| 容器 | deepseek-rl:910b-cann9.1-vllm0.23-v25 |
 
-### 3.1 整体架构图
+### 4.2 训练配置
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│                      Model Distill Pipeline                     │
-│                                                                │
-│  ┌──────────┐   ┌──────────────┐   ┌──────────┐   ┌─────────┐ │
-│  │ 场景定义  │→  │  数据生成     │→  │  训练    │→  │  评估   │ │
-│  │ config    │   │  Generation  │   │  Train   │   │  Eval   │ │
-│  └──────────┘   └──────────────┘   └──────────┘   └─────────┘ │
-│                       │                │               │       │
-│                       ▼                ▼               ▼       │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              Teachers (API 适配层)                        │  │
-│  │  ┌────────┐    ┌────────┐    ┌──────────┐               │  │
-│  │  │  Kimi  │    │  GLM   │    │ DeepSeek │               │  │
-│  │  │ Moonshot│   │BigModel│    │          │               │  │
-│  │  └────────┘    └────────┘    └──────────┘               │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              Student (Qwen 小模型)                        │  │
-│  │  0.5B │ 1.8B │ 3B │ 4B │ 7B │ 14B                      │  │
-│  └──────────────────────────────────────────────────────────┘  │
-│                                                                │
-│  ┌──────────────────────────────────────────────────────────┐  │
-│  │              实验管理 & 追踪                               │  │
-│  │  Config YAML │ WandB │ 实验对比 │ 模型版本               │  │
-│  └──────────────────────────────────────────────────────────┘  │
-└────────────────────────────────────────────────────────────────┘
-```
+| 参数 | 值 | 说明 |
+|------|------|------|
+| 微调方式 | LoRA | 参数高效，单节点足够 |
+| rank | 64 | LoRA 秩 |
+| alpha | 128 | 缩放因子 |
+| dropout | 0.05 | 正则化 |
+| 精度 | bf16 | 910B 原生支持 |
+| Epochs | 3 | |
+| Learning Rate | 2e-4 | cosine schedule |
+| Batch Size | 4 | per_device |
+| Grad Accum | 4 | 有效 batch=16 |
+| Max Seq | 2048 | |
 
-### 3.2 数据流
-
-```
-                    ┌─────────────┐
-                    │ 场景 + 种子  │
-                    └──────┬──────┘
-                           ▼
-                    ┌─────────────┐
-                    │ Prompt 构建  │
-                    └──────┬──────┘
-                           ▼
-              ┌─────────────────────────┐
-              │   Teacher API 调用       │
-              │   (Kimi/GLM/DeepSeek)   │
-              └────────────┬────────────┘
-                           ▼
-              ┌─────────────────────────┐
-              │   原始数据 (JSONL)       │
-              │   question + answer     │
-              └────────────┬────────────┘
-                           ▼
-              ┌─────────────────────────┐
-              │   质量过滤               │
-              │   去重 / 去噪 / 检查    │
-              └────────────┬────────────┘
-                           ▼
-              ┌─────────────────────────┐
-              │   格式转换               │
-              │   ChatML / Alpaca / DPO │
-              └────────────┬────────────┘
-                           ▼
-              ┌─────────────────────────┐
-              │   训练                   │
-              │   SFT → DPO (可选)      │
-              └────────────┬────────────┘
-                           ▼
-              ┌─────────────────────────┐
-              │   评估                   │
-              │   ROUGE + LLM-Judge     │
-              └────────────┬────────────┘
-                           ▼
-                    ┌─────────────┐
-                    │ 蒸馏后模型   │
-                    └─────────────┘
-```
-
----
-
-## 四、核心模块详细设计
-
-### 4.1 Teacher 适配层 (`distill/teachers/`)
-
-**统一接口，屏蔽不同 API 差异：**
+### 4.3 NPU 关键配置
 
 ```python
-class BaseTeacher(ABC):
-    def chat(self, messages: list[dict], **kwargs) -> TeacherResponse
-    def chat_simple(self, prompt: str, system: str = "") -> str
+# 必须设置
+source /usr/local/Ascend/ascend-toolkit/set_env.sh
+
+# torch_npu 适配
+import torch_npu  # 注册 NPU 后端
+torch.npu.set_device(0)
+
+# bf16 精度 (不用 bitsandbytes 量化，NPU 不支持)
+model = AutoModelForCausalLM.from_pretrained(
+    model_path,
+    torch_dtype=torch.bfloat16,
+    device_map="npu:0",
+)
+
+# LoRA target modules (Qwen3)
+target_modules = ["q_proj", "k_proj", "v_proj", "o_proj",
+                  "gate_proj", "up_proj", "down_proj"]
 ```
 
-| Teacher | Base URL | 默认模型 | 特点 |
-|---------|----------|----------|------|
-| Kimi | api.moonshot.cn/v1 | moonshot-v1-128k | 长文本强，128K上下文 |
-| GLM | open.bigmodel.cn/api/paas/v4 | glm-4-plus | 对话强，中文能力突出 |
-| DeepSeek | api.deepseek.com/v1 | deepseek-chat | 推理强，性价比高 |
+## 五、评估方案
 
-**设计要点：**
-- 三个 API 都兼容 OpenAI 格式，所以底层用 `openai` SDK 统一调用
-- `create_teacher()` 工厂函数，一行切换 Teacher
-- 后续可轻松扩展其他 Teacher（Claude、GPT 等）
+### 5.1 评估集
 
-### 4.2 数据生成模块 (`distill/data/`)
+50 道编程题（HumanEval + MBPP 各抽，训练时未见过）。
 
-**这是蒸馏的核心——数据质量决定最终效果。**
+### 5.2 评估维度
 
-#### 4.2.1 数据生成策略
+| 维度 | 方法 | 说明 |
+|------|------|------|
+| **pass@1** | 代码执行 | 运行测试用例，通过率 (核心指标) |
+| **计划质量** | LLM-as-Judge | GLM-5.2 按准确性/完整性/连贯性/简洁性打分 |
+| **规划深度** | 统计 | 平均步骤数、有无边界分析 |
+| **对比基线** | 对照 | 原始 Qwen3-8B (未蒸馏) 的 pass@1 |
 
-```
-┌─────────────────────────────────────────────┐
-│            数据生成策略                       │
-│                                             │
-│  1. 种子驱动生成                             │
-│     人工提供主题种子 → Teacher 生成具体问答   │
-│                                             │
-│  2. 多样性采样                               │
-│     不同难度、不同话题、不同风格              │
-│                                             │
-│  3. 思维链增强                               │
-│     让 Teacher 输出推理过程（CoT）           │
-│     Student 不仅学答案，还学思考方式         │
-│                                             │
-│  4. 自定义 Prompt                           │
-│     高级用户直接提供 prompt 列表             │
-└─────────────────────────────────────────────┘
-```
+### 5.3 预期效果
 
-#### 4.2.2 质量过滤
+| 指标 | 原始 Qwen3-8B | 蒸馏后 | GLM-5.2 |
+|------|--------------|--------|---------|
+| pass@1 | ~60% | ~75%+ | ~90%+ |
+| 有计划输出 | 偶尔 | 几乎总是 | 总是 |
+| 平均步骤 | 2~3步 | 6~8步 | 7~9步 |
+| 部署成本 | 本地 | 本地 | API |
 
-| 过滤规则 | 说明 |
-|---------|------|
-| 空值检查 | 问题或答案为空 |
-| 长度检查 | 太短或太长 |
-| 拒绝检测 | "我无法回答"、"作为AI" 等 |
-| 去重 | 完全重复的问题 |
-| 格式检查 | JSON 解析失败 |
+## 六、执行计划
 
-#### 4.2.3 输出格式
+### Week 1: MVP
 
-支持三种格式自动转换：
-- **ChatML** — Qwen 原生格式（推荐）
-- **ShareGPT** — 通用 SFT 格式
-- **Alpaca** — 经典指令微调格式
-- **DPO** — 偏好对格式（后续阶段）
+| 天 | 任务 |
+|----|------|
+| Day 1 | 确认方案，适配 NPU 代码 |
+| Day 2-3 | 调 GLM-5.2 API 生成数据 (500题) |
+| Day 4 | 数据清洗 + 格式化 |
+| Day 5-6 | 单节点 8 卡 SFT 训练 |
+| Day 7 | 评估 + 分析 |
 
-### 4.3 训练模块 (`distill/train/`)
+### Week 2: 迭代优化
 
-#### 4.3.1 SFT 训练
+- 根据评估结果调整 (补数据 / 调参数)
+- 可选: DPO 偏好对齐
+- 可选: 压缩到更小模型
+
+## 七、关键路径
 
 ```
-训练配置:
-├── 基础模型: Qwen2.5-1.5B (可调整)
-├── 微调方式: LoRA / QLoRA (参数高效)
-│   ├── rank: 16
-│   ├── alpha: 32
-│   └── target_modules: q,k,v,o,gate,up,down
-├── 量化: 4-bit NF4 (降低显存)
-├── 学习率: 2e-4 (cosine schedule)
-└── Epochs: 3
+跳板机:     119.8.234.170
+项目目录:   /data/z00666713/model-distill/
+代码仓库:   github.com/Maxwell-AI-lab/model-distill
+Teacher:    GLM-5.2 API (Coding Plan)
+Student:    /data/model/Qwen3-8B
+容器镜像:   deepseek-rl:910b-cann9.1-vllm0.23-v25
 ```
 
-**为什么用 LoRA？**
-- 全参数微调需要 8x A100，LoRA 单卡就能跑
-- 效果接近全参微调（在蒸馏场景下够用）
-- 可以方便地合并多个 LoRA adapter
+## 八、Roadmap
 
-#### 4.3.2 DPO 训练（Level 2）
-
-```
-SFT 模型 → DPO 对齐 → 更贴近 Teacher 的偏好
-```
-
-需要构造 `chosen`（Teacher 答案）vs `rejected`（Student 旧答案）的偏好对。
-
-### 4.4 评估模块 (`distill/eval/`)
-
-**双重评估体系：**
-
-| 评估方式 | 指标 | 特点 |
-|---------|------|------|
-| **文本匹配** | ROUGE-1/2/L, BLEU, Exact Match | 客观、快、免费 |
-| **LLM-as-Judge** | 准确性/完整性/连贯性/简洁性 (1-10分) | 主观、更接近人类判断 |
-
-LLM-as-Judge 流程：
-```
-同一问题 → Teacher 答案 (参考) + Student 答案 (预测)
-         → Judge 模型 (用另一个 Teacher) 打分
-```
-
-### 4.5 流水线编排 (`distill/pipeline.py`)
-
-**一个 YAML 配置驱动完整实验：**
-
-```yaml
-name: "customer-service-v1"
-teacher_type: "glm"
-teacher_model: "glm-4-plus"
-student_model: "Qwen/Qwen2.5-1.5B"
-scene: "电商客服对话"
-num_samples: 200
-train_method: "sft"
-use_lora: true
-```
-
-```bash
-distill run --config configs/experiment.yaml
-```
-
----
-
-## 五、项目结构
-
-```
-model-distill/
-├── README.md                      # 项目文档
-├── DESIGN.md                      # 本文档 — 技术设计
-├── pyproject.toml                 # 项目配置
-├── distill/                       # 核心代码
-│   ├── __init__.py
-│   ├── cli.py                     # CLI 入口 (distill run/generate/train/eval/info)
-│   ├── pipeline.py                # 流水线编排
-│   ├── teachers/                  # Teacher 适配层
-│   │   ├── base.py                # 统一基类
-│   │   ├── kimi.py                # Kimi (Moonshot)
-│   │   ├── glm.py                 # GLM (智谱)
-│   │   └── deepseek.py            # DeepSeek
-│   ├── data/                      # 数据生成
-│   │   ├── generator.py           # 批量数据生成
-│   │   ├── filter.py              # 质量过滤
-│   │   └── formatter.py           # 多格式转换
-│   ├── train/                     # 训练
-│   │   ├── sft.py                 # SFT 训练器
-│   │   └── dpo.py                 # DPO 训练器
-│   ├── eval/                      # 评估
-│   │   ├── metrics.py             # 文本匹配指标
-│   │   └── judge.py               # LLM-as-Judge
-│   └── utils/                     # 工具
-│       ├── config.py              # 配置管理
-│       └── logger.py              # 日志
-├── configs/                       # 实验配置
-│   └── example.yaml
-├── scripts/                       # 独立脚本
-│   ├── generate_data.py
-│   ├── train.py
-│   └── evaluate.py
-└── tests/                         # 测试
-    └── test_teachers.py
-```
-
----
-
-## 六、使用流程
-
-### 6.1 典型工作流
-
-```bash
-# 1. 配置 API Key
-export GLM_API_KEY="your-key"
-export KIMI_API_KEY="your-key"
-export DEEPSEEK_API_KEY="your-key"
-
-# 2. 编写实验配置
-cp configs/example.yaml configs/my_scene.yaml
-vim configs/my_scene.yaml
-
-# 3. 一键蒸馏
-distill run --config configs/my_scene.yaml
-
-# 或者分步执行：
-distill generate --config configs/my_scene.yaml -o data/raw.jsonl
-distill train --config configs/my_scene.yaml -m sft
-distill eval --config configs/my_scene.yaml
-```
-
-### 6.2 自定义场景
-
-只需改 YAML 配置：
-
-```yaml
-name: "medical-qa-v1"
-scene: "医疗健康问答"
-system_prompt: "你是一个专业的医疗助手..."
-topic_seeds: ["感冒发烧", "高血压", "糖尿病", "饮食营养", "运动健康"]
-num_samples: 500
-student_model: "Qwen/Qwen2.5-7B"
-```
-
----
-
-## 七、Roadmap
-
-### Phase 1 — MVP（当前 ✅）
-- [x] Teacher 适配层（Kimi / GLM / DeepSeek）
-- [x] 基础数据生成 + 过滤
-- [x] SFT 训练（LoRA/QLoRA）
-- [x] 基础评估（ROUGE + LLM-Judge）
-- [x] CLI + 流水线编排
+### Phase 1 — MVP (当前)
+- [x] Teacher 适配 (GLM-5.2 Anthropic 接口)
+- [x] 数据集加载 (HumanEval / MBPP)
+- [x] 代码规划数据生成
+- [x] NPU SFT 训练器 (910B 适配)
+- [x] 代码执行评估 (pass@1)
+- [x] 流水线编排 + 一键脚本
 
 ### Phase 2 — 增强
 - [ ] CoT 思维链数据生成
 - [ ] DPO 偏好对齐训练
-- [ ] 多 Teacher 数据融合
-- [ ] 数据增强（改写、扰动）
-- [ ] WandB 实验追踪集成
+- [ ] 数据增强 (改写、扰动)
+- [ ] 更大训练规模 (多节点)
 
 ### Phase 3 — 高级
-- [ ] 自动化场景发现（用 Teacher 分析目标场景需要哪些能力）
-- [ ] 多阶段蒸馏（SFT → DPO → RLHF）
-- [ ] 模型合并（mergekit）
-- [ ] 导出部署（量化、ONNX、vLLM）
+- [ ] 通用任务规划蒸馏
+- [ ] 模型压缩 (7B → 1.5B)
+- [ ] 导出部署 (量化、vLLM)
 - [ ] Web UI 可视化
-
-### Phase 4 — 平台化
-- [ ] 分布式训练支持
-- [ ] 模型注册表 + 版本管理
-- [ ] A/B 测试框架
-- [ ] 在线学习闭环
-
----
-
-## 八、技术选型说明
-
-| 选择 | 理由 |
-|------|------|
-| OpenAI SDK 调 Teacher | 三个 API 都兼容 OpenAI 格式，一套代码通吃 |
-| Qwen 2.5 做 Student | 开源、中文好、尺寸丰富（0.5B~72B）、社区活跃 |
-| LoRA/QLoRA | 参数高效，单卡可训，效果够用 |
-| YAML 配置 | 实验可复现，方便版本管理 |
-| Rich 终端输出 | 美观、进度条、彩色日志 |
-| TRL 库做训练 | HuggingFace 生态，SFT/DPO 都支持 |
