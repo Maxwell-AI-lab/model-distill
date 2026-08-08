@@ -23,7 +23,7 @@ from distill.data.datasets import DatasetLoader
 from distill.data.code_generator import CodeDistillGenerator, extract_training_data
 
 key = os.environ["GLM_API_KEY"]
-teacher = create_teacher("glm", api_key=*** True)
+teacher = create_teacher("glm", api_key=key)
 console.print(f"✅ Teacher: {teacher}")
 
 tasks = DatasetLoader.load_mixed(
