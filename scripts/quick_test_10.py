@@ -4,7 +4,11 @@ import os
 import sys
 
 os.environ["GLM_API_KEY"] = "4dbec255f842461ca9d26501f361ab2f.ayr6tCjeyOrkWngV"
-sys.path.insert(0, "/data/z00666713/model-distill")
+sys.path.insert(0, ".")
+os.chdir("/data/z00666713/model-distill")
+
+# 延迟导入避免 openai 依赖
+import importlib
 
 from distill.teachers import create_teacher
 
