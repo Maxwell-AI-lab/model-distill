@@ -186,7 +186,7 @@ class CodeDistillGenerator:
             BarColumn(),
             TextColumn("{task.completed}/{task.total}"),
         ) as progress:
-            task_id = progress.add_task("Generating...", total=len(tasks))
+            task_bar = progress.add_task("Generating...", total=len(tasks))
 
             with open(output_path, "w", encoding="utf-8") as f:
                 for i, task in enumerate(tasks):
@@ -195,7 +195,7 @@ class CodeDistillGenerator:
                     f.write(json.dumps(result, ensure_ascii=False) + "\n")
                     f.flush()  # 实时写入，防止中断丢数据
 
-                    progress.advance(task)
+                    progress.advance(task_bar)
 
         # 统计
         stats = self._compute_stats(results)
