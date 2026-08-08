@@ -27,37 +27,23 @@ console = Console()
 # ── 工具: 代码执行器 ─────────────────────────────────────────
 
 def run_python_code(code: str, timeout: int = 10) -> str:
-    """执行 Python 代码，返回输出或错误信息"""
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".py", delete=False, encoding="utf-8"
-    ) as f:
-        f.write(code)
-        temp_path = f.name
+    """执行 Python 代码，返回输出或错误信息。
+    使用 exec() 直接执行，避免子进程启动开销 (NPU 容器中子进程启动极慢)。
+    """
+    import io
+    import contextlib
+
+    stdout_buf = io.StringIO()
 
     try:
-        result = subprocess.run(
-            [sys.executable, temp_path],
-            capture_output=True,
-            text=True,
-            timeout=timeout,
-        )
-        output = result.stdout.strip()
-        error = result.stderr.strip()
-
-        if result.returncode == 0:
-            return output if output else "(无输出，执行成功)"
-        else:
-            # 截取关键错误信息
-            error_lines = error.split("\n")
-            # 取最后 5 行（通常是最关键的）
-            key_error = "\n".join(error_lines[-5:])
-            return f"❌ 执行失败:\n{key_error}"
-    except subprocess.TimeoutExpired:
-        return "❌ 执行超时"
+        with contextlib.redirect_stdout(stdout_buf):
+            exec(code, {"__name__": "__main__", "__builtins__": __builtins__})
+        output = stdout_buf.getvalue().strip()
+        return output if output else "✅ 执行成功"
+    except AssertionError as e:
+        return f"❌ 断言失败: {e}"
     except Exception as e:
-        return f"❌ 执行异常: {e}"
-    finally:
-        Path(temp_path).unlink(missing_ok=True)
+        return f"❌ 执行失败: {type(e).__name__}: {e}"
 
 
 # ── Agent 系统 Prompt ────────────────────────────────────────

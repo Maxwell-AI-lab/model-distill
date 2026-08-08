@@ -230,31 +230,21 @@ class AgentEvaluator:
 
 
 def run_python_code(code: str, timeout: int = 10) -> str:
-    """执行 Python 代码"""
-    with tempfile.NamedTemporaryFile(
-        mode="w", suffix=".py", delete=False, encoding="utf-8"
-    ) as f:
-        f.write(code)
-        temp_path = f.name
+    """执行 Python 代码。使用 exec() 直接执行，避免子进程启动开销。"""
+    import io
+    import contextlib
+
+    stdout_buf = io.StringIO()
 
     try:
-        result = subprocess.run(
-            [sys.executable, temp_path],
-            capture_output=True, text=True, timeout=timeout,
-        )
-        output = result.stdout.strip()
-        error = result.stderr.strip()
-        if result.returncode == 0:
-            return output if output else "✅ 执行成功"
-        else:
-            error_lines = error.split("\n")
-            return f"❌ 执行失败:\n" + "\n".join(error_lines[-5:])
-    except subprocess.TimeoutExpired:
-        return "❌ 超时"
+        with contextlib.redirect_stdout(stdout_buf):
+            exec(code, {"__name__": "__main__", "__builtins__": __builtins__})
+        output = stdout_buf.getvalue().strip()
+        return output if output else "✅ 执行成功"
+    except AssertionError as e:
+        return f"❌ 断言失败: {e}"
     except Exception as e:
-        return f"❌ 异常: {e}"
-    finally:
-        Path(temp_path).unlink(missing_ok=True)
+        return f"❌ 执行失败: {type(e).__name__}: {e}"
 
 
 # ── 导入 Agent prompt (跟 agent_generator 共享) ──────────────
