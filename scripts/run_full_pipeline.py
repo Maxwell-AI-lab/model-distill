@@ -70,11 +70,12 @@ training_args = TrainingArguments(
     learning_rate=2e-4, warmup_ratio=0.1, lr_scheduler_type="cosine",
     logging_steps=5, save_steps=999999, bf16=True, no_cuda=True,
     report_to="none", seed=42,
+    max_length=4096,
 )
 
 trainer = SFTTrainer(
     model=model, args=training_args, train_dataset=dataset,
-    processing_class=tokenizer, max_seq_length=4096,
+    processing_class=tokenizer,
 )
 
 console.print("\n训练中...\n")
