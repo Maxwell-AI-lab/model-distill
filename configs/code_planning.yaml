@@ -1,0 +1,51 @@
+# 蒸馏实验配置 — 代码任务规划能力蒸馏
+
+name: "code-planning-v1"
+description: "将 DeepSeek/GLM/Kimi 的代码规划能力蒸馏到 Qwen2.5-Coder-7B"
+
+# Teacher 配置
+teachers:
+  - type: "deepseek"
+    model: "deepseek-chat"
+    api_key_env: "DEEPSEEK_API_KEY"
+  - type: "glm"
+    model: "glm-4-plus"
+    api_key_env: "GLM_API_KEY"
+  - type: "kimi"
+    model: "moonshot-v1-32k"
+    api_key_env: "KIMI_API_KEY"
+
+# 数据源
+data_sources:
+  - "humaneval"    # 164题
+  - "mbpp"         # 974题
+num_tasks: 500     # 总共采样 500 题
+eval_ratio: 0.1   # 10% 做评估
+
+# Student 模型
+student_model: "Qwen/Qwen2.5-Coder-7B-Instruct"
+
+# 训练配置 (NPU 910B)
+train:
+  method: "sft"
+  use_lora: true
+  lora_r: 64
+  lora_alpha: 128
+  lora_dropout: 0.05
+  epochs: 3
+  batch_size: 4
+  grad_accum: 4
+  learning_rate: 0.0002
+  warmup_ratio: 0.1
+  max_seq_length: 2048
+  # NPU
+  dtype: "bfloat16"      # 910B 原生 bf16
+  nnodes: 1              # MVP 先单节点
+  nproc_per_node: 8      # 8 卡
+  output_dir: "outputs/code-planning-v1"
+
+# 评估配置
+eval:
+  pass_at_k: 1           # pass@1
+  use_llm_judge: true
+  judge_teacher: "glm"   # 用 GLM 做 Judge
