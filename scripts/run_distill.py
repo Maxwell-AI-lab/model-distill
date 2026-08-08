@@ -255,7 +255,7 @@ def main():
 
     # generate
     gen = subparsers.add_parser("generate", help="生成蒸馏数据")
-    gen.add_argument("--teachers", "-t", default="deepseek,glm,kimi", help="Teacher列表(逗号分隔)")
+    gen.add_argument("--teachers", "-t", default="glm", help="Teacher列表(逗号分隔)")
     gen.add_argument("--sources", "-s", default="humaneval,mbpp", help="数据源")
     gen.add_argument("--num-tasks", "-n", type=int, default=500, help="题目数")
     gen.add_argument("--eval-ratio", type=float, default=0.1, help="评估集比例")
@@ -283,7 +283,7 @@ def main():
 
     # all
     al = subparsers.add_parser("all", help="一键全流程")
-    al.add_argument("--teachers", "-t", default="deepseek,glm,kimi")
+    al.add_argument("--teachers", "-t", default="glm")
     al.add_argument("--sources", "-s", default="humaneval,mbpp")
     al.add_argument("--num-tasks", "-n", type=int, default=500)
     al.add_argument("--model", "-m", default="Qwen/Qwen2.5-Coder-7B-Instruct")

@@ -1,19 +1,13 @@
 # 蒸馏实验配置 — 代码任务规划能力蒸馏
 
 name: "code-planning-v1"
-description: "将 DeepSeek/GLM/Kimi 的代码规划能力蒸馏到 Qwen2.5-Coder-7B"
+description: "将 GLM-5.2 的代码规划能力蒸馏到 Qwen2.5-Coder-7B"
 
-# Teacher 配置
-teachers:
-  - type: "deepseek"
-    model: "deepseek-chat"
-    api_key_env: "DEEPSEEK_API_KEY"
-  - type: "glm"
-    model: "glm-4-plus"
-    api_key_env: "GLM_API_KEY"
-  - type: "kimi"
-    model: "moonshot-v1-32k"
-    api_key_env: "KIMI_API_KEY"
+# Teacher 配置 (单 Teacher: GLM-5.2)
+teacher:
+  type: "glm"
+  model: "glm-5.2"
+  api_key_env: "GLM_API_KEY"
 
 # 数据源
 data_sources:
@@ -48,4 +42,4 @@ train:
 eval:
   pass_at_k: 1           # pass@1
   use_llm_judge: true
-  judge_teacher: "glm"   # 用 GLM 做 Judge
+  judge_teacher: "glm"   # 用 GLM-5.2 做 Judge

@@ -12,16 +12,17 @@ class GLMTeacher(BaseTeacher):
     Base URL: https://open.bigmodel.cn/api/paas/v4
     """
 
-    DEFAULT_MODEL = "glm-4-plus"
+    DEFAULT_MODEL = "glm-5.2"
     BASE_URL = "https://open.bigmodel.cn/api/paas/v4"
 
     AVAILABLE_MODELS = [
-        "glm-4-plus",        # 旗舰模型
-        "glm-4",             # 标准模型
-        "glm-4-air",         # 轻量模型
-        "glm-4-airx",        # 轻量极速
-        "glm-4-flash",       # 免费极速
-        "glm-4-long",        # 长文本
+        "glm-5.2",           # GLM-5.2 最新旗舰
+        "glm-4-plus",        # GLM-4 旗舰
+        "glm-4",             # GLM-4 标准
+        "glm-4-air",         # GLM-4 轻量
+        "glm-4-airx",        # GLM-4 轻量极速
+        "glm-4-flash",       # GLM-4 免费极速
+        "glm-4-long",        # GLM-4 长文本
     ]
 
     def __init__(self, api_key: str, model: str = DEFAULT_MODEL, **kwargs):
